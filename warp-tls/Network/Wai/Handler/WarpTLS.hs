@@ -95,14 +95,14 @@ data TLSSettings = TLSSettings {
     -- ^ The TLS versions this server accepts.
     --
     -- >>> tlsAllowedVersions defaultTlsSettings
-    -- [TLS12,TLS11,TLS10]
+    -- [TLS13,TLS13ID18,TLS12,TLS11,TLS10]
     --
     -- Since 1.4.2
   , tlsCiphers :: [TLS.Cipher]
     -- ^ The TLS ciphers this server accepts.
     --
     -- >>> tlsCiphers defaultTlsSettings
-    -- [ECDHE-ECDSA-AES256GCM-SHA384,ECDHE-ECDSA-AES128GCM-SHA256,ECDHE-RSA-AES256GCM-SHA384,ECDHE-RSA-AES128GCM-SHA256,DHE-RSA-AES256GCM-SHA384,DHE-RSA-AES128GCM-SHA256,ECDHE-ECDSA-AES256CBC-SHA384,ECDHE-RSA-AES256CBC-SHA384,DHE-RSA-AES256-SHA256,ECDHE-ECDSA-AES256CBC-SHA,ECDHE-RSA-AES256CBC-SHA,DHE-RSA-AES256-SHA1,RSA-AES256GCM-SHA384,RSA-AES256-SHA256,RSA-AES256-SHA1]
+    -- [ECDHE-ECDSA-AES256GCM-SHA384,ECDHE-ECDSA-AES128GCM-SHA256,ECDHE-RSA-AES256GCM-SHA384,ECDHE-RSA-AES128GCM-SHA256,DHE-RSA-AES256GCM-SHA384,DHE-RSA-AES128GCM-SHA256,ECDHE-ECDSA-AES256CBC-SHA384,ECDHE-RSA-AES256CBC-SHA384,DHE-RSA-AES256-SHA256,ECDHE-ECDSA-AES256CBC-SHA,ECDHE-RSA-AES256CBC-SHA,DHE-RSA-AES256-SHA1,RSA-AES256GCM-SHA384,RSA-AES256-SHA256,RSA-AES256-SHA1,AES128GCM-SHA256,AES256GCM-SHA384]
     --
     -- Since 1.4.2
   , tlsWantClientCert :: Bool
@@ -142,7 +142,7 @@ defaultTlsSettings = TLSSettings {
   , keyMemory = Nothing
   , onInsecure = DenyInsecure "This server only accepts secure HTTPS connections."
   , tlsLogging = def
-  , tlsAllowedVersions = [TLS.TLS12,TLS.TLS11,TLS.TLS10]
+  , tlsAllowedVersions = [TLS.TLS13,TLS.TLS13ID18,TLS.TLS12,TLS.TLS11,TLS.TLS10]
   , tlsCiphers = ciphers
   , tlsWantClientCert = False
   , tlsServerHooks = def
@@ -270,6 +270,7 @@ runTLSSocket' tlsset@TLSSettings{..} set credential sock app =
       , TLS.supportedClientInitiatedRenegotiation = False
       , TLS.supportedSession             = True
       , TLS.supportedFallbackScsv        = True
+      , TLS.supportedGroups              = [TLS.X25519,TLS.P256,TLS.P384,TLS.P521]
       }
 
 alpn :: [S.ByteString] -> IO S.ByteString
@@ -402,6 +403,8 @@ getTLSinfo ctx = do
                     TLS.TLS10 -> (3,1)
                     TLS.TLS11 -> (3,2)
                     TLS.TLS12 -> (3,3)
+                    TLS.TLS13ID18 -> (3,4)
+                    TLS.TLS13     -> (3,4)
             return TLS {
                 tlsMajorVersion = major
               , tlsMinorVersion = minor
