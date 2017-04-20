@@ -95,7 +95,7 @@ data TLSSettings = TLSSettings {
     -- ^ The TLS versions this server accepts.
     --
     -- >>> tlsAllowedVersions defaultTlsSettings
-    -- [TLS13,TLS13ID18,TLS12,TLS11,TLS10]
+    -- [TLS13,TLS13ID19,TLS12,TLS11,TLS10]
     --
     -- Since 1.4.2
   , tlsCiphers :: [TLS.Cipher]
@@ -142,7 +142,7 @@ defaultTlsSettings = TLSSettings {
   , keyMemory = Nothing
   , onInsecure = DenyInsecure "This server only accepts secure HTTPS connections."
   , tlsLogging = def
-  , tlsAllowedVersions = [TLS.TLS13,TLS.TLS13ID18,TLS.TLS12,TLS.TLS11,TLS.TLS10]
+  , tlsAllowedVersions = [TLS.TLS13,TLS.TLS13ID19,TLS.TLS12,TLS.TLS11,TLS.TLS10]
   , tlsCiphers = ciphers
   , tlsWantClientCert = False
   , tlsServerHooks = def
@@ -403,7 +403,7 @@ getTLSinfo ctx = do
                     TLS.TLS10 -> (3,1)
                     TLS.TLS11 -> (3,2)
                     TLS.TLS12 -> (3,3)
-                    TLS.TLS13ID18 -> (3,4)
+                    TLS.TLS13ID19 -> (3,4)
                     TLS.TLS13     -> (3,4)
             return TLS {
                 tlsMajorVersion = major
