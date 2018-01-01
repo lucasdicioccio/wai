@@ -165,26 +165,30 @@ frameReceiver ctx mkreq recvN = loop 0 `E.catch` sendGoaway
                  Nothing
                    | isResponse streamId -> return Nothing
                    | otherwise           -> do
-                         when (ftyp `notElem` [FrameHeaders,FramePriority]) $
+                         when (ftyp `notElem` [FrameHeaders,FramePriority,FrameWindowUpdate,FrameRSTStream]) $
                              E.throwIO $ ConnectionError ProtocolError "this frame is not allowed in an idel stream"
                          csid <- readIORef clientStreamId
-                         if streamId <= csid then do
-                             if ftyp == FramePriority then
-                                 return Nothing -- will be ignored
-                               else
-                                 E.throwIO $ ConnectionError ProtocolError "stream identifier must not decrease"
-                           else do
-                             when (ftyp == FrameHeaders) $ do
-                                 writeIORef clientStreamId streamId
-                                 cnt <- readIORef concurrency
-                                 -- Checking the limitation of concurrency
-                                 when (cnt >= maxConcurrency) $
-                                     E.throwIO $ StreamError RefusedStream streamId
-                             ws <- initialWindowSize <$> readIORef http2settings
-                             newstrm <- newStream streamId (fromIntegral ws)
-                             when (ftyp == FrameHeaders) $ opened ctx newstrm
-                             insert streamTable streamId newstrm
-                             return $ Just newstrm
+                         -- see https://github.com/yesodweb/wai/issues/639 for the race condition this relaxed check allows
+                         case csid - streamId of 
+                             lag | lag < 0 -> do
+                                     when (ftyp == FrameHeaders) $ do
+                                         writeIORef clientStreamId streamId
+                                         cnt <- readIORef concurrency
+                                         -- Checking the limitation of concurrency
+                                         when (cnt >= maxConcurrency) $
+                                             E.throwIO $ StreamError RefusedStream streamId
+                                     ws <- initialWindowSize <$> readIORef http2settings
+                                     newstrm <- newStream streamId (fromIntegral ws)
+                                     when (ftyp == FrameHeaders) $ opened ctx newstrm
+                                     insert streamTable streamId newstrm
+                                     return $ Just newstrm
+                                 | lag < 100 -> do
+                                     return Nothing -- will be ignored
+                                 | otherwise -> do
+                                     if ftyp == FramePriority then
+                                         return Nothing -- will be ignored
+                                       else
+                                         E.throwIO $ ConnectionError ProtocolError "stream identifier must not decrease"
 
     consume = void . recvN
 
