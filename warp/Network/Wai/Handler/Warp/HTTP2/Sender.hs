@@ -175,7 +175,7 @@ frameSender ctx@Context{outputQ,controlQ,connectionWindow,encodeDynamicTable}
 
     outputOrEnqueueAgain out off = E.handle resetStream $ do
         state <- readStreamState strm
-        if isClosed state then
+        if isHalfClosedLocal state then
             return off
           else case out of
                  Output _ _ _ wait _ OWait -> do
@@ -209,6 +209,7 @@ frameSender ctx@Context{outputQ,controlQ,connectionWindow,encodeDynamicTable}
                 let !lim = min cws sws
                 output out off lim
         resetStream e = do
+            print ("reseting", e)
             closed ctx strm (ResetByMe e)
             let !rst = resetFrame InternalError $ streamNumber strm
             enqueueControl controlQ $ CFrame rst

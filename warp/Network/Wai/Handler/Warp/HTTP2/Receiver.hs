@@ -25,6 +25,8 @@ import Network.Wai.Handler.Warp.Imports hiding (delete, insert, readInt)
 import Network.Wai.Handler.Warp.ReadInt
 import Network.Wai.Handler.Warp.Types
 
+import Data.Maybe (isJust)
+
 ----------------------------------------------------------------
 
 frameReceiver :: Context -> MkReq -> (BufSize -> IO ByteString) -> IO ()
@@ -60,6 +62,7 @@ frameReceiver ctx mkreq recvN = loop 0 `E.catch` sendGoaway
             enqueueControl controlQ CFinish
           else do
             cont <- processStreamGuardingError $ decodeFrameHeader hd
+            print ("cont", cont)
             when cont $ loop (n + 1)
 
     processStreamGuardingError (fid, FrameHeader{streamId})
@@ -101,7 +104,9 @@ frameReceiver ctx mkreq recvN = loop 0 `E.catch` sendGoaway
       | otherwise = do
           checkContinued
           !mstrm <- getStream
+          print ("get-stream", header, testEndStream $ flags header, isJust mstrm)
           pl <- recvN payloadLength
+          print ("got-payload")
           case mstrm of
             Nothing -> do
                 -- for h2spec only
@@ -111,7 +116,9 @@ frameReceiver ctx mkreq recvN = loop 0 `E.catch` sendGoaway
                 return True -- just ignore this frame
             Just strm@Stream{streamPrecedence} -> do
               state <- readStreamState strm
+              print ("curr-state:", state)
               state' <- stream ftyp header pl ctx state strm
+              print (state, "->", state')
               case state' of
                   Open (NoBody tbl@(_,reqvt) pri) -> do
                       resetContinued
@@ -159,7 +166,7 @@ frameReceiver ctx mkreq recvN = loop 0 `E.catch` sendGoaway
                  js@(Just strm0) -> do
                      when (ftyp == FrameHeaders) $ do
                          st <- readStreamState strm0
-                         when (isHalfClosedRemote st) $ E.throwIO $ ConnectionError StreamClosed "header must not be sent to half closed"
+                         when (isHalfClosedRemote st) $ E.throwIO $ ConnectionError StreamClosed "header must not be sent to half or fully closed stream"
                          -- Priority made an idele stream
                          when (isIdle st) $ opened ctx strm0
                      return js
@@ -295,6 +302,23 @@ stream FrameHeaders header@FrameHeader{flags} bs _ (Open (Body q _ _)) _ = do
         -- we don't support continuation here.
         E.throwIO $ ConnectionError ProtocolError "continuation in trailer is not supported"
 
+-- ignore data-frame except for flow-control when we're done locally
+stream FrameData
+       header@FrameHeader{flags,payloadLength,streamId}
+       bs
+       Context{controlQ} s@(HalfClosedLocal _)
+       Stream{streamNumber} = do
+    let !endOfStream = testEndStream flags
+    when (payloadLength /= 0) $ do
+        let !frame1 = windowUpdateFrame 0 payloadLength
+            !frame2 = windowUpdateFrame streamNumber payloadLength
+            !frame = frame1 `BS.append` frame2
+        enqueueControl controlQ $ CFrame frame
+    if endOfStream then do
+        return HalfClosedRemote
+      else do
+        return s
+
 stream FrameData
        header@FrameHeader{flags,payloadLength,streamId}
        bs
@@ -317,7 +341,7 @@ stream FrameData
             Just cl -> when (cl /= len) $ E.throwIO $ StreamError ProtocolError streamId
         atomically $ writeTQueue q ""
         return HalfClosedRemote
-      else
+      else do
         return s
 
 stream FrameContinuation FrameHeader{flags} frag ctx (Open (Continued rfrags siz n endOfStream pri)) _ = do
@@ -351,6 +375,7 @@ stream FrameWindowUpdate header@FrameHeader{streamId} bs _ s Stream{streamWindow
     return s
 
 stream FrameRSTStream header bs ctx _ strm = do
+    print "reseted"
     RSTStreamFrame e <- guardIt $ decoderstStreamFrame header bs
     let !cc = Reset e
     closed ctx strm cc

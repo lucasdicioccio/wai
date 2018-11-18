@@ -181,7 +181,13 @@ isOpen _      = False
 
 isHalfClosedRemote :: StreamState -> Bool
 isHalfClosedRemote HalfClosedRemote = True
-isHalfClosedRemote _          = False
+isHalfClosedRemote (Closed _)       = True
+isHalfClosedRemote _                = False
+
+isHalfClosedLocal :: StreamState -> Bool
+isHalfClosedLocal (HalfClosedLocal _) = True
+isHalfClosedLocal (Closed _)       = True
+isHalfClosedLocal _                = False
 
 isClosed :: StreamState -> Bool
 isClosed Closed{} = True
@@ -254,8 +260,8 @@ halfClosedRemote ctx stream@Stream{streamState} = do
 
 halfClosedLocal :: Context -> Stream -> ClosedCode -> IO ()
 halfClosedLocal ctx stream@Stream{streamState} cc = do
-    print "half-closing local"
     shouldFinalize <- atomicModifyIORef streamState closeHalf
+    print ("half-closing local", cc, shouldFinalize)
     when shouldFinalize $
         closed ctx stream cc
   where
